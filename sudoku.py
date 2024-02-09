@@ -3,11 +3,12 @@ import numpy as np
 from docplex.mp.model import Model
 
 class Sudoku():
-    def __init__(self, file, check=False, solve=True):
+    def __init__(self, file, name='Sudoku', check=False, solve=True):
+        self.name = name
         self.file = file
         self.n = 9
         self.board = self.read(file)
-        self.model = Model('Sudoku')
+        self.model = Model(name)
         self.ans = self.model.integer_var_matrix(self.n, self.n, 1, self.n, 'ans')
         if solve:
             self.ans = self.solve()
@@ -66,7 +67,7 @@ class Sudoku():
         return self.ans
     
     def check_unique(self):
-        clone = self.__class__(self.file, solve=False)
+        clone = self.__class__(self.file, name=self.name + ' Clone', solve=False)
         clone.flag = clone.model.binary_var_matrix(self.n, self.n, 'flag')
         for i in range(self.n):
             for j in range(self.n):
@@ -95,6 +96,9 @@ class Sudoku():
             return f'Error: {e}'
 
 class Diagonal(Sudoku):
+    def __init__(self, file, name='Diagonal Sudoku', check=False, solve=True):
+        super().__init__(file, name, check, solve)
+
     def add_constraints(self):
         super().add_constraints()
         for i in range(self.n):
@@ -102,12 +106,13 @@ class Diagonal(Sudoku):
                 self.model.add_constraint(self.ans[i, i] != self.ans[j, j])
                 self.model.add_constraint(self.ans[i, self.n-1-i] != self.ans[j, self.n-1-j])
 
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Sudoku Solver')
     parser.add_argument('-f', '--file', type=str, help='File containing the Sudoku puzzle')
     parser.add_argument('-o', '--output', type=str, help='File to save the solution')
     parser.add_argument('--check', default=False, action='store_true', help='Check if the solution is unique')
-    parser.add_argument('--type', type=str, default='normal', help='Type of sudoku puzzle', choices=['normal', 'diagonal'])
+    parser.add_argument('--type', type=str, default='normal', help='Type of puzzle', choices=['normal', 'diagonal'])
     
     args = parser.parse_args()
     if not args.file:
@@ -115,10 +120,10 @@ if __name__ == '__main__':
                     'diagonal': 'example/sudoku_diagonal.txt'}
         args.file = defaults[args.type]
     types = {'normal': Sudoku, 'diagonal': Diagonal}
-    sudoku = types[args.type](args.file, check=args.check)
+    solver = types[args.type](args.file, check=args.check)
 
     if args.output:
         with open(args.output, 'w') as f:
-            f.write(str(sudoku))
+            f.write(str(solver))
     else:
-        print(sudoku)
+        print(solver)
