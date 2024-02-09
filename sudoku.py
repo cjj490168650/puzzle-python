@@ -1,13 +1,14 @@
 import argparse
-from docplex.mp.model import Model
 import numpy as np
+from docplex.mp.model import Model
 
 class Sudoku():
     def __init__(self, file, check=False, solve=True):
         self.file = file
+        self.n = 9
         self.board = self.read(file)
         self.model = Model('Sudoku')
-        self.ans = self.model.integer_var_matrix(9, 9, lb=1, ub=9, name='ans')
+        self.ans = self.model.integer_var_matrix(self.n, self.n, 1, self.n, 'x')
         if solve:
             self.ans = self.solve()
         self.check = check
@@ -15,39 +16,54 @@ class Sudoku():
             self.unique = self.check_unique()
     
     def read(self, file):
-        self.board = np.zeros((9, 9), dtype=int)
+        self.board = None
         with open(file, 'r') as f:
             raw = f.read()
-            nums = raw.split()
-            if len(nums) != 81:
-                raise ValueError(f'Invalid number of entries, expected 81, got {len(nums)}')
-            for i in range(9):
-                for j in range(9):
-                    if nums[i*9+j].isdigit() and 1 <= int(nums[i*9+j]) <= 9:
-                        self.board[i, j] = int(nums[i*9+j])
+            # nums = raw.split()
+            nums = [x for x in raw if not x.isspace()]
+            if len(nums) == 36:
+                self.n = 6
+            elif len(nums) == 81:
+                self.n = 9
+            else:
+                raise ValueError(f'Invalid number of entries, expected 36 or 81, got {len(nums)}')
+            self.board = np.zeros((self.n, self.n), dtype=int)
+            for i in range(self.n):
+                for j in range(self.n):
+                    if nums[i*self.n+j].isdigit() and 1 <= int(nums[i*self.n+j]) <= self.n:
+                        self.board[i, j] = int(nums[i*self.n+j])
                     else:
                         self.board[i, j] = 0
         return self.board
     
     def solve(self):
-        self.model.add_constraints([self.ans[i, j] == self.board[i, j] for i in range(9) for j in range(9) if self.board[i, j] != 0])
-        self.model.add_constraints([self.model.sum(self.ans[i, j] for j in range(9)) == 45 for i in range(9)])
-        self.model.add_constraints([self.model.sum(self.ans[i, j] for i in range(9)) == 45 for j in range(9)])
-        for i in range(3):
-            for j in range(3):
-                self.model.add_constraint(self.model.sum(self.ans[i*3+k, j*3+l] for k in range(3) for l in range(3)) == 45)
-        for i in range(9):
-            for j in range(9):
-                for k in range(j+1, 9):
+        self.model.add_constraints([self.ans[i, j] == self.board[i, j] for i in range(self.n) for j in range(self.n) if self.board[i, j] != 0])
+        for i in range(self.n):
+            for j in range(self.n):
+                for k in range(j+1, self.n):
                     self.model.add_constraint(self.ans[i, j] != self.ans[i, k])
                     self.model.add_constraint(self.ans[j, i] != self.ans[k, i])
+        if self.n == 6:
+            for i in range(3):
+                for j in range(2):
+                    pairs = [(i*2+k, j*3+l) for k in range(2) for l in range(3)]
+                    for k in range(len(pairs)):
+                        for l in range(k+1, len(pairs)):
+                            self.model.add_constraint(self.ans[pairs[k]] != self.ans[pairs[l]])
+        else:
+            for i in range(3):
+                for j in range(3):
+                    pairs = [(i*3+k, j*3+l) for k in range(3) for l in range(3)]
+                    for k in range(len(pairs)):
+                        for l in range(k+1, len(pairs)):
+                            self.model.add_constraint(self.ans[pairs[k]] != self.ans[pairs[l]])
         self.model.solve()
         return self.ans
     
     def check_unique(self):
         clone = Sudoku(self.file, solve=False)
-        for i in range(9):
-            for j in range(9):
+        for i in range(self.n):
+            for j in range(self.n):
                 clone.model.add_constraint(clone.ans[i, j] != int(self.ans[i, j].solution_value))
         clone.ans = clone.solve()
         result = str(clone)
@@ -61,8 +77,8 @@ class Sudoku():
     def __str__(self):
         try:
             res = ''
-            for i in range(9):
-                for j in range(9):
+            for i in range(self.n):
+                for j in range(self.n):
                     res += str(int(self.ans[i, j].solution_value)) + ' '
                 res += '\n'
             if self.check:
