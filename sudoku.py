@@ -19,7 +19,6 @@ class Sudoku():
                 self.unique = f'Error: {e}'
     
     def read(self, file):
-        self.board = None
         with open(file, 'r') as f:
             raw = f.read()
             # nums = raw.split()
@@ -105,8 +104,8 @@ class Diagonal(Sudoku):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Sudoku Solver')
-    parser.add_argument('-f', '--file', type=str, help='File containing the sudoku puzzle')
-    parser.add_argument('-o', '--output', type=str, help='Output file to write the solution')
+    parser.add_argument('-f', '--file', type=str, help='File containing the Sudoku puzzle')
+    parser.add_argument('-o', '--output', type=str, help='File to save the solution')
     parser.add_argument('--check', default=False, action='store_true', help='Check if the solution is unique')
     parser.add_argument('--type', type=str, default='normal', help='Type of sudoku puzzle', choices=['normal', 'diagonal'])
     
@@ -117,7 +116,7 @@ if __name__ == '__main__':
         args.file = defaults[args.type]
     types = {'normal': Sudoku, 'diagonal': Diagonal}
     sudoku = types[args.type](args.file, check=args.check)
-    
+
     if args.output:
         with open(args.output, 'w') as f:
             f.write(str(sudoku))
