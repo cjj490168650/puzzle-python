@@ -1,5 +1,8 @@
+import os
 import argparse
 import numpy as np
+import time
+from online import fetch, submit
 from docplex.mp.model import Model
 
 class Sudoku():
@@ -18,25 +21,34 @@ class Sudoku():
                 self.unique = self.check_unique()
             except Exception as e:
                 self.unique = f'Error: {e}'
+
+    def parse(self, task):
+        task = task.replace('_', '')
+        for i in range(26):
+            task = task.replace(chr(ord('a')+i),'.'*(i+1))
+        return task
     
     def read(self, file):
-        with open(file, 'r') as f:
-            raw = f.read()
-            # nums = raw.split()
-            nums = [x for x in raw if not x.isspace()]
-            if len(nums) == 36:
-                self.n = 6
-            elif len(nums) == 81:
-                self.n = 9
-            else:
-                raise ValueError(f'Invalid number of entries, expected 36 or 81, got {len(nums)}')
-            self.board = np.zeros((self.n, self.n), dtype=int)
-            for i in range(self.n):
-                for j in range(self.n):
-                    if nums[i*self.n+j].isdigit() and 1 <= int(nums[i*self.n+j]) <= self.n:
-                        self.board[i, j] = int(nums[i*self.n+j])
-                    else:
-                        self.board[i, j] = 0
+        if os.path.exists(file):
+            with open(file, 'r') as f:
+                raw = f.read()
+        else:
+            raw = self.parse(file)
+        # nums = raw.split()
+        nums = [x for x in raw if not x.isspace()]
+        if len(nums) == 36:
+            self.n = 6
+        elif len(nums) == 81:
+            self.n = 9
+        else:
+            raise ValueError(f'Invalid number of entries, expected 36 or 81, got {len(nums)}')
+        self.board = np.zeros((self.n, self.n), dtype=int)
+        for i in range(self.n):
+            for j in range(self.n):
+                if nums[i*self.n+j].isdigit() and 1 <= int(nums[i*self.n+j]) <= self.n:
+                    self.board[i, j] = int(nums[i*self.n+j])
+                else:
+                    self.board[i, j] = 0
         return self.board
     
     def add_constraints(self):
@@ -113,17 +125,31 @@ if __name__ == '__main__':
     parser.add_argument('-o', '--output', type=str, help='File to save the solution')
     parser.add_argument('--check', default=False, action='store_true', help='Check if the solution is unique')
     parser.add_argument('--type', type=str, default='normal', help='Type of puzzle', choices=['normal', 'diagonal'])
+    parser.add_argument('--online', default=False, action='store_true', help='Solve Sudoku puzzle online')
+    parser.add_argument('--diff', type=int, default=0, help='Difficulty level of the puzzle')
+    parser.add_argument('-n', type=int, default=1, help='Number of puzzles to solve')
     
     args = parser.parse_args()
-    if not args.file:
-        defaults = {'normal': 'example/sudoku.txt', 
-                    'diagonal': 'example/sudoku_diagonal.txt'}
-        args.file = defaults[args.type]
-    types = {'normal': Sudoku, 'diagonal': Diagonal}
-    solver = types[args.type](args.file, check=args.check)
-
-    if args.output:
-        with open(args.output, 'w') as f:
-            f.write(str(solver))
+    if args.online:
+        os.environ['http_proxy'] = '127.0.0.1:10809'
+        os.environ['https_proxy'] = '127.0.0.1:10809'
+        url = f'https://www.puzzle-sudoku.com/?size={args.diff}'
+        for i in range(args.n):
+            task, param = fetch(url)
+            solver = Sudoku(task, check=args.check)
+            result = str(solver)
+            result = result.replace(' ',',').replace('\n','')
+            response = submit(url, result, param)
+            print(response)
     else:
-        print(solver)
+        if not args.file:
+            defaults = {'normal': 'example/sudoku.txt', 
+                        'diagonal': 'example/diagonal.txt'}
+            args.file = defaults[args.type]
+        types = {'normal': Sudoku, 'diagonal': Diagonal}
+        solver = types[args.type](args.file, check=args.check)
+        if args.output:
+            with open(args.output, 'w') as f:
+                f.write(str(solver))
+        else:
+            print(solver)
