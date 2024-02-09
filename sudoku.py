@@ -13,7 +13,10 @@ class Sudoku():
             self.ans = self.solve()
         self.check = check
         if check:
-            self.unique = self.check_unique()
+            try:
+                self.unique = self.check_unique()
+            except Exception as e:
+                self.unique = f'Error: {e}'
     
     def read(self, file):
         self.board = None
@@ -64,7 +67,7 @@ class Sudoku():
         return self.ans
     
     def check_unique(self):
-        clone = Sudoku(self.file, solve=False)
+        clone = self.__class__(self.file, solve=False)
         clone.flag = clone.model.binary_var_matrix(self.n, self.n, 'flag')
         for i in range(self.n):
             for j in range(self.n):
@@ -92,14 +95,28 @@ class Sudoku():
         except Exception as e:
             return f'Error: {e}'
 
+class Diagonal(Sudoku):
+    def add_constraints(self):
+        super().add_constraints()
+        for i in range(self.n):
+            for j in range(i+1, self.n):
+                self.model.add_constraint(self.ans[i, i] != self.ans[j, j])
+                self.model.add_constraint(self.ans[i, self.n-1-i] != self.ans[j, self.n-1-j])
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Sudoku Solver')
-    parser.add_argument('-f', '--file', type=str, default='example/sudoku.txt', help='File containing the sudoku puzzle')
+    parser.add_argument('-f', '--file', type=str, help='File containing the sudoku puzzle')
     parser.add_argument('-o', '--output', type=str, help='Output file to write the solution')
     parser.add_argument('--check', default=False, action='store_true', help='Check if the solution is unique')
+    parser.add_argument('--type', type=str, default='normal', help='Type of sudoku puzzle', choices=['normal', 'diagonal'])
+    
     args = parser.parse_args()
-    sudoku = Sudoku(args.file, check=args.check)
+    if not args.file:
+        defaults = {'normal': 'example/sudoku.txt', 
+                    'diagonal': 'example/sudoku_diagonal.txt'}
+        args.file = defaults[args.type]
+    types = {'normal': Sudoku, 'diagonal': Diagonal}
+    sudoku = types[args.type](args.file, check=args.check)
     
     if args.output:
         with open(args.output, 'w') as f:
