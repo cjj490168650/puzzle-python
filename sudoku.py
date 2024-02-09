@@ -8,7 +8,7 @@ class Sudoku():
         self.n = 9
         self.board = self.read(file)
         self.model = Model('Sudoku')
-        self.ans = self.model.integer_var_matrix(self.n, self.n, 1, self.n, 'x')
+        self.ans = self.model.integer_var_matrix(self.n, self.n, 1, self.n, 'ans')
         if solve:
             self.ans = self.solve()
         self.check = check
@@ -36,7 +36,7 @@ class Sudoku():
                         self.board[i, j] = 0
         return self.board
     
-    def solve(self):
+    def add_constraints(self):
         self.model.add_constraints([self.ans[i, j] == self.board[i, j] for i in range(self.n) for j in range(self.n) if self.board[i, j] != 0])
         for i in range(self.n):
             for j in range(self.n):
@@ -57,14 +57,19 @@ class Sudoku():
                     for k in range(len(pairs)):
                         for l in range(k+1, len(pairs)):
                             self.model.add_constraint(self.ans[pairs[k]] != self.ans[pairs[l]])
+    
+    def solve(self):
+        self.add_constraints()
         self.model.solve()
         return self.ans
     
     def check_unique(self):
         clone = Sudoku(self.file, solve=False)
+        clone.flag = clone.model.binary_var_matrix(self.n, self.n, 'flag')
         for i in range(self.n):
             for j in range(self.n):
-                clone.model.add_constraint(clone.ans[i, j] != int(self.ans[i, j].solution_value))
+                clone.model.add_indicator(clone.flag[i, j], clone.ans[i, j] != round(self.ans[i, j].solution_value))
+        clone.model.add_constraint(clone.model.sum(clone.flag) >= 1)
         clone.ans = clone.solve()
         result = str(clone)
         if 'did not solve successfully' in result:
@@ -79,7 +84,7 @@ class Sudoku():
             res = ''
             for i in range(self.n):
                 for j in range(self.n):
-                    res += str(int(self.ans[i, j].solution_value)) + ' '
+                    res += str(round(self.ans[i, j].solution_value)) + ' '
                 res += '\n'
             if self.check:
                 res += '\n' + self.unique
@@ -95,6 +100,7 @@ if __name__ == '__main__':
     parser.add_argument('--check', default=False, action='store_true', help='Check if the solution is unique')
     args = parser.parse_args()
     sudoku = Sudoku(args.file, check=args.check)
+    
     if args.output:
         with open(args.output, 'w') as f:
             f.write(str(sudoku))
