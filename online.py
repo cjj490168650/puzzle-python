@@ -52,7 +52,10 @@ def submit(url:str, result:str, param:str):
     data = {'robot': 1, 'ansH': result, 'param': param, 'ready': 'Done'}
     response = requests.post(url, headers=headers, data=data)
     verdict = re.search(r'<div id="ajaxResponse"><p class="(.*?)">(.*?)</p>', response.text).group(2)
-    solparam = re.search(r'name="solparams" value="(.*?)"', response.text).group(1)
+    try:
+        solparam = re.search(r'name="solparams" value="(.*?)"', response.text).group(1)
+    except:
+        solparam = ''
     return verdict, solparam
 
 def hall(url:str, solparam:str):

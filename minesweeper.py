@@ -141,26 +141,32 @@ if __name__ == '__main__':
     parser.add_argument('--type', type=str, default='minesweeper', help='Type of puzzle', choices=['minesweeper', 'mosaic'])
     parser.add_argument('--online', default=False, action='store_true', help='Solver MineSweeper puzzle online')
     parser.add_argument('--size', type=int, default=5, help='Size of the puzzle', choices=[5, 7, 10, 15, 20])
-    parser.add_argument('--diff', type=str, default='easy', help='Difficulty of the puzzle', choices=['easy', 'hard'])
+    parser.add_argument('--diff', type=str, default='easy', help='Difficulty of the puzzle', choices=['easy', 'hard', 'daily', 'weekly', 'monthly'])
     parser.add_argument('-n', type=int, default=1, help='Number of puzzles to solve')
 
     args = parser.parse_args()
     if args.online:
         os.environ['http_proxy'] = '127.0.0.1:10809'
         os.environ['https_proxy'] = '127.0.0.1:10809'
-        url = f'https://www.puzzle-minesweeper.com/{args.type}-{args.size}x{args.size}-{args.diff}/'
+        if args.diff in ['daily', 'weekly', 'monthly']:
+            url = f'https://www.puzzle-minesweeper.com/{args.diff}-{args.type}/'
+        else:
+            url = f'https://www.puzzle-minesweeper.com/{args.type}-{args.size}x{args.size}-{args.diff}/'
         for i in range(args.n):
             task, param = fetch(url)
             types = {'minesweeper': MineSweeper, 'mosaic': Mosaic}
             solver = types[args.type](task, name=args.type, check=args.check)
             result = str(solver)
             response, solparam = submit(url, result, param)
-            code = hall(url, solparam)
-            if code == 200:
-                response += ' (submit to hall successfully)'
+            if not solparam:
+                print(response)
             else:
-                response += f' (Error: {code})'
-            print(response)
+                code = hall(url, solparam)
+                if code == 200:
+                    response += ' (submit to hall successfully)'
+                else:
+                    response += f' (Error: {code})'
+                print(response)
     else:
         if not args.file:
             defaults = {'minesweeper': 'example/minesweeper.txt', 
