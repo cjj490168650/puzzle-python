@@ -2,6 +2,14 @@ import requests
 import os
 import re
 
+def token():
+    '''
+    Prepare your api_token in 'api.txt'
+    '''
+    with open('api.txt', 'r') as f:
+        api_token = f.read().strip()
+    return api_token
+
 def fetch(url:str, new=True):
     '''
     Fetch the task and param of the puzzle from the url
@@ -15,8 +23,7 @@ def fetch(url:str, new=True):
         task: str, the task of the puzzle, needed to be parsed
         param: str, the param of the puzzle to submit the result
     '''
-    with open('api.txt', 'r') as f:
-        api_token = f.read().strip()
+    api_token = token()
     headers = {'Cookie': f'api_token={api_token}'}
     data = {'robot': 1}
     if new:
@@ -40,8 +47,7 @@ def submit(url:str, result:str, param:str):
         verdict: str, the verdict of the result
         solparam: str, the solparam to submit to hall
     '''
-    with open('api.txt', 'r') as f:
-        api_token = f.read().strip()
+    api_token = token()
     headers = {'Cookie': f'api_token={api_token}'}
     data = {'robot': 1, 'ansH': result, 'param': param, 'ready': 'Done'}
     response = requests.post(url, headers=headers, data=data)
@@ -61,10 +67,9 @@ def hall(url:str, solparam:str):
     Returns:
         code: int, the status code of the response
     '''
+    api_token = token()
     domain = re.search(r'www\.(.*?)\.com', url).group(1)
     url = f'https://www.{domain}.com/hallsubmit.php'
-    with open('api.txt', 'r') as f:
-        api_token = f.read().strip()
     headers = {'Cookie': f'api_token={api_token}'}
     data = {'solparams': solparam, 'robot': 1}
     response = requests.post(url, headers=headers, data=data)
