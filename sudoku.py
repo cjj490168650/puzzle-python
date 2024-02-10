@@ -1,5 +1,5 @@
 import os
-import argparse
+from argparse import ArgumentParser
 import numpy as np
 from online import fetch, submit, hall
 from docplex.mp.model import Model
@@ -194,18 +194,21 @@ if __name__ == '__main__':
     'diagonal': {'class': Diagonal, 'file': 'example/diagonal.txt'}
     }
 
-    parser = argparse.ArgumentParser(description='Sudoku Solver')
+    parser = ArgumentParser(description='Sudoku Solver')
     parser.add_argument('-f', '--file', type=str, help='File containing the puzzle')
     parser.add_argument('-o', '--output', type=str, help='File to save the solution')
-    parser.add_argument('--check', default=False, action='store_true', help='Check if the solution is unique')
+    parser.add_argument('--check', action='store_true', help='Check if the solution is unique')
     parser.add_argument('--type', type=str, default='normal', help='Type of puzzle', choices=config.keys())
-    parser.add_argument('--online', default=False, action='store_true', help='Solve puzzle online')
-    parser.add_argument('--diff', type=int, default=0, help='Difficulty of the online puzzle')
+    parser.add_argument('--online', action='store_true', help='Solve puzzle online')
+    parser.add_argument('--diff', type=int, default=0, help='Difficulty of the online puzzle', choices=range(12))
     parser.add_argument('-n', type=int, default=1, help='Number of puzzles to solve')
     parser.add_argument('--strategy', type=str, default='default', help='Strategy to solve the puzzle', choices=['default', 'another'])
+    parser.add_argument('--debug', action='store_true', help='Print debug information')
     
     args = parser.parse_args()
     if args.online:
+        if args.diff == 8:
+            raise NotImplementedError
         os.environ['http_proxy'] = '127.0.0.1:10809'
         os.environ['https_proxy'] = '127.0.0.1:10809'
         url = f'https://www.puzzle-sudoku.com/?size={args.diff}'
@@ -223,6 +226,11 @@ if __name__ == '__main__':
                 else:
                     response += f' (Error: {code})'
                 print(response)
+            if args.debug:
+                print(f'task: {task}')
+                print(f'parsed: {solver.parse(task)}')
+                print(f'result: {result}')
+                print(solver.pretty())
     else:
         if not args.file:
             args.file = config[args.type]['file']
