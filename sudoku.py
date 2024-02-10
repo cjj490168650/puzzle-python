@@ -173,12 +173,15 @@ if __name__ == '__main__':
             solver = Sudoku(task, check=False)
             result = str(solver)
             response, solparam = submit(url, result, param)
-            code = hall(url, solparam)
-            if code == 200:
-                response += ' (submit to hall successfully)'
+            if not solparam:
+                print(response)
             else:
-                response += f' (Error: {code})'
-            print(response)
+                code = hall(url, solparam)
+                if code == 200:
+                    response += ' (submit to hall successfully)'
+                else:
+                    response += f' (Error: {code})'
+                print(response)
     else:
         if not args.file:
             defaults = {'normal': 'example/sudoku.txt', 
