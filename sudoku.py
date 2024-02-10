@@ -1,7 +1,6 @@
 import os
 import argparse
 import numpy as np
-import time
 from online import fetch, submit, hall
 from docplex.mp.model import Model
 
@@ -111,7 +110,7 @@ class Sudoku():
                 clone.model.add_indicator(clone.flag[i, j], clone.ans[i, j] != round(self.ans[i, j].solution_value))
         clone.model.add_constraint(clone.model.sum(clone.flag) >= 1)
         clone.ans = clone.solve()
-        result = str(clone)
+        result = clone.pretty()
         if 'did not solve successfully' in result:
             return 'The solution is unique'
         elif 'Error' in result:
@@ -119,7 +118,7 @@ class Sudoku():
         else:
             return 'The solution is not unique\n' + result
     
-    def __str__(self):
+    def pretty(self):
         try:
             res = ''
             for i in range(self.n):
@@ -128,6 +127,16 @@ class Sudoku():
                 res += '\n'
             if self.check:
                 res += '\n' + self.unique
+            return res
+        except Exception as e:
+            return f'Error: {e}'
+
+    def __str__(self):
+        try:
+            res = ''
+            for i in range(self.n):
+                for j in range(self.n):
+                    res += str(round(self.ans[i, j].solution_value)) + ','
             return res
         except Exception as e:
             return f'Error: {e}'
@@ -163,7 +172,6 @@ if __name__ == '__main__':
             task, param = fetch(url)
             solver = Sudoku(task, check=False)
             result = str(solver)
-            result = result.replace(' ',',').replace('\n','')
             response, solparam = submit(url, result, param)
             code = hall(url, solparam)
             if code == 200:
@@ -178,8 +186,9 @@ if __name__ == '__main__':
             args.file = defaults[args.type]
         types = {'normal': Sudoku, 'diagonal': Diagonal}
         solver = types[args.type](args.file, check=args.check)
+        result = solver.pretty()
         if args.output:
             with open(args.output, 'w') as f:
-                f.write(str(solver))
+                f.write(result)
         else:
-            print(solver)
+            print(result)

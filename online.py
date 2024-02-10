@@ -2,7 +2,19 @@ import requests
 import os
 import re
 
-def fetch(url, new=True):
+def fetch(url:str, new=True):
+    '''
+    Fetch the task and param of the puzzle from the url
+    Example:
+        >>> fetch('https://www.puzzle-sudoku.com/')
+        ('d7a8f3b6_4...', 'amU5fmJJT2...')
+    Args:
+        url: str, the url of the puzzle
+        new: bool, whether to start a new puzzle
+    Returns:
+        task: str, the task of the puzzle, needed to be parsed
+        param: str, the param of the puzzle to submit the result
+    '''
     with open('api.txt', 'r') as f:
         api_token = f.read().strip()
     headers = {'Cookie': f'api_token={api_token}'}
@@ -14,7 +26,20 @@ def fetch(url, new=True):
     param = re.search(r'name="param" value="(.*?)"', response.text).group(1)
     return task, param
 
-def submit(url, result, param):
+def submit(url:str, result:str, param:str):
+    '''
+    Submit the result to get the verdict and solparam
+    Example:
+        >>> submit('https://www.puzzle-sudoku.com/', '1,2,3,4,5,...', 'amU5fmJJT2...')
+        ('Congratulations! You have solved the puzzle in ...', 'amVbPEU0Vj...')
+    Args:
+        url: str, the url of the puzzle
+        result: str, the result of the puzzle
+        param: str, the param of the puzzle got from fetch()
+    Returns:
+        verdict: str, the verdict of the result
+        solparam: str, the solparam to submit to hall
+    '''
     with open('api.txt', 'r') as f:
         api_token = f.read().strip()
     headers = {'Cookie': f'api_token={api_token}'}
@@ -24,7 +49,18 @@ def submit(url, result, param):
     solparam = re.search(r'name="solparams" value="(.*?)"', response.text).group(1)
     return verdict, solparam
 
-def hall(url, solparam):
+def hall(url:str, solparam:str):
+    '''
+    Submit to hall of fame
+    Example:
+        >>> hall('https://www.puzzle-sudoku.com/', 'amVbPEU0Vj...')
+        200
+    Args:
+        url: str, the url of the puzzle
+        solparam: str, the solparam got from submit()
+    Returns:
+        code: int, the status code of the response
+    '''
     domain = re.search(r'www\.(.*?)\.com', url).group(1)
     url = f'https://www.{domain}.com/hallsubmit.php'
     with open('api.txt', 'r') as f:

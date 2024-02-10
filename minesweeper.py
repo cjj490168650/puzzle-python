@@ -1,5 +1,7 @@
+import os
 import argparse
 import numpy as np
+from online import fetch, submit, hall
 from docplex.mp.model import Model
 
 class Mosaic():
@@ -19,20 +21,33 @@ class Mosaic():
                 self.unique = self.check_unique()
             except Exception as e:
                 self.unique = f'Error: {e}'
+
+    def parse(self, task):
+        for i in range(26):
+            task = task.replace(chr(ord('a') + i), '.'*(i+1))
+        n = round(np.sqrt(len(task)))
+        if n * n != len(task):
+            raise ValueError(f'Invalid length of task: {len(task)}')
+        task = '\n'.join([task[i*n:(i+1)*n] for i in range(n)])
+        return task
     
     def read(self, file):
-        with open(file, 'r') as f:
-            lines = f.readlines()
-            lines = [line.strip().replace(' ', '').replace('\t', '') for line in lines if line.strip()]
-            self.n = len(lines)
-            self.m = max([len(line) for line in lines])
-            self.board = np.zeros((self.n, self.m), dtype=int)
-            for i in range(self.n):
-                for j in range(len(lines[i])):
-                    if lines[i][j].isdigit():
-                        self.board[i, j] = int(lines[i][j])
-                    else:
-                        self.board[i, j] = -1
+        if os.path.exists(file):
+            with open(file, 'r') as f:
+                raw = f.read()
+        else:
+            raw = self.parse(file)
+        lines = raw.split('\n')
+        lines = [line.strip().replace(' ', '').replace('\t', '') for line in lines if line.strip()]
+        self.n = len(lines)
+        self.m = max([len(line) for line in lines])
+        self.board = np.zeros((self.n, self.m), dtype=int)
+        for i in range(self.n):
+            for j in range(len(lines[i])):
+                if lines[i][j].isdigit():
+                    self.board[i, j] = int(lines[i][j])
+                else:
+                    self.board[i, j] = -1
         return self.board
     
     def add_constraints(self):
@@ -63,8 +78,8 @@ class Mosaic():
             return f'Error: {result}'
         else:
             return 'The solution is not unique\n' + result
-        
-    def __str__(self):
+    
+    def pretty(self):
         try:
             res = ''
             for i in range(self.n):
@@ -74,6 +89,17 @@ class Mosaic():
                 res += '\n'
             if self.check:
                 res += '\n' + self.unique
+            return res
+        except Exception as e:
+            return f'Error: {e}'
+
+    def __str__(self):
+        try:
+            res = ''
+            for i in range(self.n):
+                for j in range(self.m):
+                    t = round(self.ans[i, j].solution_value)
+                    res += 'y' if t else 'n'
             return res
         except Exception as e:
             return f'Error: {e}'
@@ -89,7 +115,7 @@ class MineSweeper(Mosaic):
                 if self.board[i, j] != -1:
                     self.model.add_constraint(self.ans[i, j] == 0)
 
-    def __str__(self):
+    def pretty(self):
         try:
             res = ''
             for i in range(self.n):
@@ -113,17 +139,38 @@ if __name__ == '__main__':
     parser.add_argument('-o', '--output', type=str, help='File to save the solution')
     parser.add_argument('--check', default=False, action='store_true', help='Check if the solution is unique')
     parser.add_argument('--type', type=str, default='minesweeper', help='Type of puzzle', choices=['minesweeper', 'mosaic'])
+    parser.add_argument('--online', default=False, action='store_true', help='Solver MineSweeper puzzle online')
+    parser.add_argument('--size', type=int, default=5, help='Size of the puzzle', choices=[5, 7, 10, 15, 20])
+    parser.add_argument('--diff', type=str, default='easy', help='Difficulty of the puzzle', choices=['easy', 'hard'])
+    parser.add_argument('-n', type=int, default=1, help='Number of puzzles to solve')
 
     args = parser.parse_args()
-    if not args.file:
-        defaults = {'minesweeper': 'example/minesweeper.txt', 
-                    'mosaic': 'example/mosaic.txt'}
-        args.file = defaults[args.type]
-    types = {'minesweeper': MineSweeper, 'mosaic': Mosaic}
-    solver = types[args.type](args.file, name=args.type, check=args.check)
-
-    if args.output:
-        with open(args.output, 'w') as f:
-            f.write(str(solver))
+    if args.online:
+        os.environ['http_proxy'] = '127.0.0.1:10809'
+        os.environ['https_proxy'] = '127.0.0.1:10809'
+        url = f'https://www.puzzle-minesweeper.com/{args.type}-{args.size}x{args.size}-{args.diff}/'
+        for i in range(args.n):
+            task, param = fetch(url)
+            types = {'minesweeper': MineSweeper, 'mosaic': Mosaic}
+            solver = types[args.type](task, name=args.type, check=args.check)
+            result = str(solver)
+            response, solparam = submit(url, result, param)
+            code = hall(url, solparam)
+            if code == 200:
+                response += ' (submit to hall successfully)'
+            else:
+                response += f' (Error: {code})'
+            print(response)
     else:
-        print(solver)
+        if not args.file:
+            defaults = {'minesweeper': 'example/minesweeper.txt', 
+                        'mosaic': 'example/mosaic.txt'}
+            args.file = defaults[args.type]
+        types = {'minesweeper': MineSweeper, 'mosaic': Mosaic}
+        solver = types[args.type](args.file, name=args.type, check=args.check)
+        result = solver.pretty()
+        if args.output:
+            with open(args.output, 'w') as f:
+                f.write(result)
+        else:
+            print(result)
