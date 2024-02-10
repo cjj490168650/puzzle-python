@@ -2,7 +2,7 @@ import os
 import argparse
 import numpy as np
 import time
-from online import fetch, submit
+from online import fetch, submit, hall
 from docplex.mp.model import Model
 
 class Sudoku():
@@ -23,10 +23,25 @@ class Sudoku():
                 self.unique = f'Error: {e}'
 
     def parse(self, task):
-        task = task.replace('_', '')
-        for i in range(26):
-            task = task.replace(chr(ord('a')+i),'.'*(i+1))
-        return task
+        raw = ''
+        while task:
+            if len(task) >= 2 and task[:2].isdigit():
+                num = int(task[:2])
+                raw += chr(ord('A') + num - 10)
+                task = task[2:]
+            elif task[0].isdigit():
+                num = int(task[0])
+                raw += str(num)
+                task = task[1:]
+            elif task[0].isalpha():
+                num = ord(task[0]) - ord('a') + 1
+                raw += '.' * num
+                task = task[1:]
+            elif task[0] == '_':
+                task = task[1:]
+            else:
+                raise ValueError(f"Invalid character '{task[0]}'")
+        return raw
     
     def read(self, file):
         if os.path.exists(file):
@@ -40,13 +55,19 @@ class Sudoku():
             self.n = 6
         elif len(nums) == 81:
             self.n = 9
+        elif len(nums) == 144:
+            self.n = 12
+        elif len(nums) == 256:
+            self.n = 16
         else:
-            raise ValueError(f'Invalid number of entries, expected 36 or 81, got {len(nums)}')
+            raise ValueError(f'Invalid number of entries, got {len(nums)}')
         self.board = np.zeros((self.n, self.n), dtype=int)
         for i in range(self.n):
             for j in range(self.n):
-                if nums[i*self.n+j].isdigit() and 1 <= int(nums[i*self.n+j]) <= self.n:
+                if nums[i*self.n+j].isdigit():
                     self.board[i, j] = int(nums[i*self.n+j])
+                elif nums[i*self.n+j].isalpha():
+                    self.board[i, j] = ord(nums[i*self.n+j]) - ord('A') + 10
                 else:
                     self.board[i, j] = 0
         return self.board
@@ -59,19 +80,23 @@ class Sudoku():
                     self.model.add_constraint(self.ans[i, j] != self.ans[i, k])
                     self.model.add_constraint(self.ans[j, i] != self.ans[k, i])
         if self.n == 6:
-            for i in range(3):
-                for j in range(2):
-                    pairs = [(i*2+k, j*3+l) for k in range(2) for l in range(3)]
-                    for k in range(len(pairs)):
-                        for l in range(k+1, len(pairs)):
-                            self.model.add_constraint(self.ans[pairs[k]] != self.ans[pairs[l]])
-        else:
-            for i in range(3):
-                for j in range(3):
-                    pairs = [(i*3+k, j*3+l) for k in range(3) for l in range(3)]
-                    for k in range(len(pairs)):
-                        for l in range(k+1, len(pairs)):
-                            self.model.add_constraint(self.ans[pairs[k]] != self.ans[pairs[l]])
+            x = 3
+            y = 2
+        elif self.n == 9:
+            x = 3
+            y = 3
+        elif self.n == 12:
+            x = 4
+            y = 3
+        elif self.n == 16:
+            x = 4
+            y = 4
+        for i in range(x):
+            for j in range(y):
+                pairs = [(i*y+k, j*x+l) for k in range(y) for l in range(x)]
+                for k in range(len(pairs)):
+                    for l in range(k+1, len(pairs)):
+                        self.model.add_constraint(self.ans[pairs[k]] != self.ans[pairs[l]])
     
     def solve(self):
         self.add_constraints()
@@ -136,10 +161,15 @@ if __name__ == '__main__':
         url = f'https://www.puzzle-sudoku.com/?size={args.diff}'
         for i in range(args.n):
             task, param = fetch(url)
-            solver = Sudoku(task, check=args.check)
+            solver = Sudoku(task, check=False)
             result = str(solver)
             result = result.replace(' ',',').replace('\n','')
-            response = submit(url, result, param)
+            response, solparam = submit(url, result, param)
+            code = hall(url, solparam)
+            if code == 200:
+                response += ' (submit to hall successfully)'
+            else:
+                response += f' (Error: {code})'
             print(response)
     else:
         if not args.file:

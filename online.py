@@ -21,7 +21,19 @@ def submit(url, result, param):
     data = {'robot': 1, 'ansH': result, 'param': param, 'ready': 'Done'}
     response = requests.post(url, headers=headers, data=data)
     verdict = re.search(r'<div id="ajaxResponse"><p class="(.*?)">(.*?)</p>', response.text).group(2)
-    return verdict
+    solparam = re.search(r'name="solparams" value="(.*?)"', response.text).group(1)
+    return verdict, solparam
+
+def hall(url, solparam):
+    domain = re.search(r'www\.(.*?)\.com', url).group(1)
+    url = f'https://www.{domain}.com/hallsubmit.php'
+    with open('api.txt', 'r') as f:
+        api_token = f.read().strip()
+    headers = {'Cookie': f'api_token={api_token}'}
+    data = {'solparams': solparam, 'robot': 1}
+    response = requests.post(url, headers=headers, data=data)
+    return response.status_code
+
 
 if __name__ == '__main__':
     os.environ['http_proxy'] = '127.0.0.1:10809'
