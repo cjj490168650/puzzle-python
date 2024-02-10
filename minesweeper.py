@@ -16,7 +16,7 @@ class Mosaic():
         if solve:
             self.ans = self.solve()
         self.check = check
-        if check:
+        if solve and check:
             try:
                 self.unique = self.check_unique()
             except Exception as e:
@@ -134,14 +134,20 @@ class MineSweeper(Mosaic):
 
 
 if __name__ == '__main__':
+
+    config = {
+        'minesweeper': {'class': MineSweeper, 'file': 'example/minesweeper.txt'},
+        'mosaic': {'class': Mosaic, 'file': 'example/mosaic.txt'}
+    }
+
     parser = argparse.ArgumentParser(description='MineSweeper Solver')
-    parser.add_argument('-f', '--file', type=str, help='File containing the MineSweeper puzzle')
+    parser.add_argument('-f', '--file', type=str, help='File containing the puzzle')
     parser.add_argument('-o', '--output', type=str, help='File to save the solution')
     parser.add_argument('--check', default=False, action='store_true', help='Check if the solution is unique')
-    parser.add_argument('--type', type=str, default='minesweeper', help='Type of puzzle', choices=['minesweeper', 'mosaic'])
-    parser.add_argument('--online', default=False, action='store_true', help='Solver MineSweeper puzzle online')
+    parser.add_argument('--type', type=str, default='minesweeper', help='Type of puzzle', choices=config.keys())
+    parser.add_argument('--online', default=False, action='store_true', help='Solve puzzle online')
     parser.add_argument('--size', type=int, default=5, help='Size of the puzzle', choices=[5, 7, 10, 15, 20])
-    parser.add_argument('--diff', type=str, default='easy', help='Difficulty of the puzzle', choices=['easy', 'hard', 'daily', 'weekly', 'monthly'])
+    parser.add_argument('--diff', type=str, default='easy', help='Difficulty of the online puzzle', choices=['easy', 'hard', 'daily', 'weekly', 'monthly'])
     parser.add_argument('-n', type=int, default=1, help='Number of puzzles to solve')
 
     args = parser.parse_args()
@@ -154,8 +160,7 @@ if __name__ == '__main__':
             url = f'https://www.puzzle-minesweeper.com/{args.type}-{args.size}x{args.size}-{args.diff}/'
         for i in range(args.n):
             task, param = fetch(url)
-            types = {'minesweeper': MineSweeper, 'mosaic': Mosaic}
-            solver = types[args.type](task, name=args.type, check=args.check)
+            solver = config[args.type]['class'](task, name=args.type, check=args.check)
             result = str(solver)
             response, solparam = submit(url, result, param)
             if not solparam:
@@ -169,11 +174,8 @@ if __name__ == '__main__':
                 print(response)
     else:
         if not args.file:
-            defaults = {'minesweeper': 'example/minesweeper.txt', 
-                        'mosaic': 'example/mosaic.txt'}
-            args.file = defaults[args.type]
-        types = {'minesweeper': MineSweeper, 'mosaic': Mosaic}
-        solver = types[args.type](args.file, name=args.type, check=args.check)
+            args.file = config[args.type]['file']
+        solver = config[args.type]['class'](args.file, name=args.type, check=args.check)
         result = solver.pretty()
         if args.output:
             with open(args.output, 'w') as f:

@@ -1,6 +1,7 @@
 import requests
 import os
 import re
+import retry
 
 def token():
     '''
@@ -10,6 +11,7 @@ def token():
         api_token = f.read().strip()
     return api_token
 
+@retry.retry(tries=5, delay=1)
 def fetch(url:str, new=True):
     '''
     Fetch the task and param of the puzzle from the url
@@ -33,6 +35,7 @@ def fetch(url:str, new=True):
     param = re.search(r'name="param" value="(.*?)"', response.text).group(1)
     return task, param
 
+@retry.retry(tries=5, delay=1)
 def submit(url:str, result:str, param:str):
     '''
     Submit the result to get the verdict and solparam
@@ -58,6 +61,7 @@ def submit(url:str, result:str, param:str):
         solparam = ''
     return verdict, solparam
 
+@retry.retry(tries=5, delay=1)
 def hall(url:str, solparam:str):
     '''
     Submit to hall of fame

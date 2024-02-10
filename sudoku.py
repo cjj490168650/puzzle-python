@@ -5,17 +5,18 @@ from online import fetch, submit, hall
 from docplex.mp.model import Model
 
 class Sudoku():
-    def __init__(self, file, name='Sudoku', check=False, solve=True):
+    def __init__(self, file, name='Sudoku', check=False, solve=True, strategy='default'):
         self.name = name
         self.file = file
         self.n = 9
         self.board = self.read(file)
         self.model = Model(name)
         self.ans = self.model.integer_var_matrix(self.n, self.n, 1, self.n, 'ans')
+        self.strategy = strategy
         if solve:
             self.ans = self.solve()
         self.check = check
-        if check:
+        if solve and check:
             try:
                 self.unique = self.check_unique()
             except Exception as e:
@@ -96,14 +97,46 @@ class Sudoku():
                 for k in range(len(pairs)):
                     for l in range(k+1, len(pairs)):
                         self.model.add_constraint(self.ans[pairs[k]] != self.ans[pairs[l]])
+
+    def add_constraints_another(self):
+        self.model.add_constraints([self.ans[i, j] == self.board[i, j] for i in range(self.n) for j in range(self.n) if self.board[i, j] != 0])
+        self.b = self.model.binary_var_cube(self.n, self.n, range(1, self.n+1), 'b')
+        for i in range(self.n):
+            for j in range(self.n):
+                for k in range(1, self.n+1):
+                    self.model.add_indicator(self.b[i, j, k], self.ans[i, j] == k)
+        for i in range(self.n):
+            for k in range(1, self.n+1):
+                self.model.add_constraint(self.model.sum(self.b[i, j, k] for j in range(self.n)) == 1)
+                self.model.add_constraint(self.model.sum(self.b[j, i, k] for j in range(self.n)) == 1)
+        if self.n == 6:
+            x = 3
+            y = 2
+        elif self.n == 9:
+            x = 3
+            y = 3
+        elif self.n == 12:
+            x = 4
+            y = 3
+        elif self.n == 16:
+            x = 4
+            y = 4
+        for i in range(x):
+            for j in range(y):
+                pairs = [(i*y+k, j*x+l) for k in range(y) for l in range(x)]
+                for k in range(1, self.n+1):
+                    self.model.add_constraint(self.model.sum(self.b[p[0], p[1], k] for p in pairs) == 1)
     
     def solve(self):
-        self.add_constraints()
+        if self.strategy == 'another':
+            self.add_constraints_another()
+        else:
+            self.add_constraints()
         self.model.solve()
         return self.ans
     
     def check_unique(self):
-        clone = self.__class__(self.file, name=self.name + ' Clone', solve=False)
+        clone = self.__class__(self.file, name=self.name + ' Clone', solve=False, strategy=self.strategy)
         clone.flag = clone.model.binary_var_matrix(self.n, self.n, 'flag')
         for i in range(self.n):
             for j in range(self.n):
@@ -153,15 +186,23 @@ class Diagonal(Sudoku):
                 self.model.add_constraint(self.ans[i, self.n-1-i] != self.ans[j, self.n-1-j])
 
 
+
 if __name__ == '__main__':
+    
+    config = {
+    'normal': {'class': Sudoku, 'file': 'example/sudoku.txt'},
+    'diagonal': {'class': Diagonal, 'file': 'example/diagonal.txt'}
+    }
+
     parser = argparse.ArgumentParser(description='Sudoku Solver')
-    parser.add_argument('-f', '--file', type=str, help='File containing the Sudoku puzzle')
+    parser.add_argument('-f', '--file', type=str, help='File containing the puzzle')
     parser.add_argument('-o', '--output', type=str, help='File to save the solution')
     parser.add_argument('--check', default=False, action='store_true', help='Check if the solution is unique')
-    parser.add_argument('--type', type=str, default='normal', help='Type of puzzle', choices=['normal', 'diagonal'])
-    parser.add_argument('--online', default=False, action='store_true', help='Solve Sudoku puzzle online')
-    parser.add_argument('--diff', type=int, default=0, help='Difficulty level of the puzzle')
+    parser.add_argument('--type', type=str, default='normal', help='Type of puzzle', choices=config.keys())
+    parser.add_argument('--online', default=False, action='store_true', help='Solve puzzle online')
+    parser.add_argument('--diff', type=int, default=0, help='Difficulty of the online puzzle')
     parser.add_argument('-n', type=int, default=1, help='Number of puzzles to solve')
+    parser.add_argument('--strategy', type=str, default='default', help='Strategy to solve the puzzle', choices=['default', 'another'])
     
     args = parser.parse_args()
     if args.online:
@@ -170,7 +211,7 @@ if __name__ == '__main__':
         url = f'https://www.puzzle-sudoku.com/?size={args.diff}'
         for i in range(args.n):
             task, param = fetch(url)
-            solver = Sudoku(task, check=False)
+            solver = config['normal']['class'](task, check=False, strategy=args.strategy)
             result = str(solver)
             response, solparam = submit(url, result, param)
             if not solparam:
@@ -184,11 +225,8 @@ if __name__ == '__main__':
                 print(response)
     else:
         if not args.file:
-            defaults = {'normal': 'example/sudoku.txt', 
-                        'diagonal': 'example/diagonal.txt'}
-            args.file = defaults[args.type]
-        types = {'normal': Sudoku, 'diagonal': Diagonal}
-        solver = types[args.type](args.file, check=args.check)
+            args.file = config[args.type]['file']
+        solver = config[args.type]['class'](args.file, check=args.check, strategy=args.strategy)
         result = solver.pretty()
         if args.output:
             with open(args.output, 'w') as f:
