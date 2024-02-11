@@ -70,13 +70,15 @@ class Nonograms():
                 if l==0:
                     self.model.add_constraint(self.model.sum(self.ans[i, j] for j in range(self.m)) == 0)
                     continue
-                self.pos['row'][i, j] = self.model.integer_var(0, self.m-l, f'pos_row_{i}_{j}')
-                for k in range(self.m-l+1):
+                pre = sum(self.board['row'][i][:j]) + j
+                suf = sum(self.board['row'][i][j+1:]) + len(self.board['row'][i]) - j - 1
+                self.pos['row'][i, j] = self.model.integer_var(pre, self.m-suf-l, f'pos_row_{i}_{j}')
+                for k in range(pre, self.m-suf-l+1):
                     self.b['row'][i, j, k] = self.model.binary_var(f'b_row_{i}_{j}_{k}')
                     self.model.add_indicator(self.b['row'][i, j, k], self.pos['row'][i, j] == k)
                     for t in range(l):
                         self.model.add_indicator(self.b['row'][i, j, k], self.ans[i, k+t] == 1)
-                self.model.add_constraint(self.model.sum(self.b['row'][i, j, k] for k in range(self.m-l+1)) == 1)
+                self.model.add_constraint(self.model.sum(self.b['row'][i, j, k] for k in range(pre, self.m-suf-l+1)) == 1)
                 if j > 0:
                     self.model.add_constraint(self.pos['row'][i, j-1] + self.board['row'][i][j-1] <= self.pos['row'][i, j] - 1)
         for i in range(self.m):
@@ -85,13 +87,15 @@ class Nonograms():
                 if (l==0):
                     self.model.add_constraint(self.model.sum(self.ans[i, j] for i in range(self.n)) == 0)
                     continue
-                self.pos['col'][i, j] = self.model.integer_var(0, self.n-l, f'pos_col_{i}_{j}')
-                for k in range(self.n-l+1):
+                pre = sum(self.board['col'][i][:j]) + j
+                suf = sum(self.board['col'][i][j+1:]) + len(self.board['col'][i]) - j - 1
+                self.pos['col'][i, j] = self.model.integer_var(pre, self.n-suf-l, f'pos_col_{i}_{j}')
+                for k in range(pre, self.n-suf-l+1):
                     self.b['col'][i, j, k] = self.model.binary_var(f'b_col_{i}_{j}_{k}')
                     self.model.add_indicator(self.b['col'][i, j, k], self.pos['col'][i, j] == k)
                     for t in range(l):
                         self.model.add_indicator(self.b['col'][i, j, k], self.ans[k+t, i] == 1)
-                self.model.add_constraint(self.model.sum(self.b['col'][i, j, k] for k in range(self.n-l+1)) == 1)
+                self.model.add_constraint(self.model.sum(self.b['col'][i, j, k] for k in range(pre, self.n-suf-l+1)) == 1)
                 if j > 0:
                     self.model.add_constraint(self.pos['col'][i, j-1] + self.board['col'][i][j-1] <= self.pos['col'][i, j] - 1)
         if self.strategy == 'another':
