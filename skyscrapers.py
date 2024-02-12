@@ -253,7 +253,7 @@ if __name__ == '__main__':
         'color': {'class': Color, 'file': 'example/colorskyscrapers.txt'}
     }
 
-    parser = ArgumentParser()
+    parser = ArgumentParser(description='Skyscrapers Solver')
     parser.add_argument('-f', '--file', type=str, help='File containing the puzzle')
     parser.add_argument('-o', '--output', type=str, help='File to save the solution')
     parser.add_argument('--check', action='store_true', help='Check if the solution is unique')

@@ -1,5 +1,5 @@
 import os
-import argparse
+from argparse import ArgumentParser
 import numpy as np
 from online import fetch, submit, hall
 from docplex.mp.model import Model
@@ -160,7 +160,7 @@ if __name__ == '__main__':
         'normal': {'class': Nonograms, 'file': 'example/nonograms.txt'},
     }
 
-    parser = argparse.ArgumentParser(description='Nonograms Solver')
+    parser = ArgumentParser(description='Nonograms Solver')
     parser.add_argument('-f', '--file', type=str, help='File containing the puzzle')
     parser.add_argument('-o', '--output', type=str, help='File to save the solution')
     parser.add_argument('--check', action='store_true', help='Check if the solution is unique')
