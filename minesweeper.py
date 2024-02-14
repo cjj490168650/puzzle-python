@@ -13,9 +13,9 @@ class Mosaic(Puzzle):
     def init_board(self):
         self.ans = self.model.addVars(self.n, self.m, vtype=GRB.BINARY, name='ans')
     
-    def parse_lines(self, lines):
+    def parse(self, lines):
         self.n = len(lines)
-        self.m = max([len(lines) for line in lines])
+        self.m = max([len(line) for line in lines])
         self.board = np.zeros((self.n, self.m), dtype=int)
         for i in range(self.n):
             for j in range(len(lines[i])):
@@ -32,7 +32,7 @@ class Mosaic(Puzzle):
         for i in range(n):
             line = [int(x) if x.isdigit() else -1 for x in task[i*n:(i+1)*n]]
             lines.append(line)
-        return self.parse_lines(lines)
+        return self.parse(lines)
     
     def parse_from_file(self, file):
         with open(file, 'r') as f:
@@ -43,7 +43,7 @@ class Mosaic(Puzzle):
         for line in raws:
             line = [int(x) if x.isdigit() else -1 for x in line]
             lines.append(line)
-        return self.parse_lines(lines)
+        return self.parse(lines)
     
     def strategy_default(self):
         for i in range(self.n):
@@ -53,7 +53,7 @@ class Mosaic(Puzzle):
                     self.model.addConstr(gp.quicksum(self.ans[p] for p in pairs) == self.board[i, j])
     
     def init_clone(self):
-        self.clone.neq = self.clone.model.addVars(self.n, self.m, vtype=GRB.BINARY, name='flag')
+        self.clone.neq = self.clone.model.addVars(self.n, self.m, vtype=GRB.BINARY, name='neq')
         for i in range(self.n):
             for j in range(self.m):
                 self.clone.model.addConstr((self.clone.neq[i, j] == 1) >> (self.clone.ans[i, j] + round(self.ans[i, j].X) == 1))
@@ -128,19 +128,19 @@ class MosaicParser(PuzzleParser):
     
     def add_extra_args(self):
         '''
-        0: 5x5 Easy Minesweeper
-        1: 5x5 Hard Minesweeper
-        2: 7x7 Easy Minesweeper
-        3: 7x7 Hard Minesweeper
-        4: 10x10 Easy Minesweeper
-        5: 10x10 Hard Minesweeper
-        6: 15x15 Easy Minesweeper
-        7: 15x15 Hard Minesweeper
-        8: 20x20 Easy Minesweeper
-        9: 20x20 Hard Minesweeper
-        10: Special Daily Minesweeper
-        11: Special Weekly Minesweeper
-        12: Special Monthly Minesweeper
+        5x5 Easy Minesweeper
+        5x5 Hard Minesweeper
+        7x7 Easy Minesweeper
+        7x7 Hard Minesweeper
+        10x10 Easy Minesweeper
+        10x10 Hard Minesweeper
+        15x15 Easy Minesweeper
+        15x15 Hard Minesweeper
+        20x20 Easy Minesweeper
+        20x20 Hard Minesweeper
+        Special Daily Minesweeper
+        Special Weekly Minesweeper
+        Special Monthly Minesweeper
         '''
         self.add_argument('--domain', type=str, default='puzzle-minesweeper', help='Domain of the online puzzle')
         self.add_argument('--size', type=int, default=5, help='Size of the puzzle', choices=[5, 7, 10, 15, 20])

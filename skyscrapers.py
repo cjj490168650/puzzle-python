@@ -1,53 +1,19 @@
 import os
-from argparse import ArgumentParser
 import numpy as np
+from puzzle import Puzzle, PuzzleParser
+from argparse import ArgumentParser
 from online import fetch, submit, hall
-from docplex.mp.model import Model
+import gurobipy as gp
+from gurobipy import GRB
 
-class Skyscrapers():
-    def __init__(self, file, name='Skyscrapers', check=False, solve=True):
-        self.name = name
-        self.file = file
-        self.n = 0
-        self.board = self.read(file)
-        self.model = Model(name)
-        self.model.output_level = "error"
-        self.ans = self.model.integer_var_matrix(self.n, self.n, 1, self.n, 'ans')
-        if solve:
-            self.ans = self.solve()
-        self.check = check
-        if solve and check:
-            try:
-                self.unique = self.check_unique()
-            except Exception as e:
-                self.unique = f'Error: {e}'
-    
-    def parse(self, task):
-        board = ''
-        if ',' in task:
-            task, board = task.split(',')
-        nums = task.split('/')
-        nums = [x if x.isdigit() else '.' for x in nums]
-        if len(nums) % 4:
-            raise ValueError(f'Invalid length of task: {len(nums)}')
-        n = len(nums) // 4
-        res = 'u' + ''.join(nums[:n]) + '\n'
-        res += 'd' + ''.join(nums[n:2*n]) + '\n'
-        res += 'l' + ''.join(nums[2*n:3*n]) + '\n'
-        res += 'r' + ''.join(nums[3*n:]) + '\n'
-        if board:
-            board = board.strip().replace('_', '')
-            for i in range(26):
-                board = board.replace(chr(ord('a') + i), '.'*(i+1))
-            res += board
-        return res
+class Skyscrapers(Puzzle):
+    def __init__(self, input, name='Skyscrapers', check=False, solve=True, strategy='default', debug=False):
+        super().__init__(input, name, check, solve, strategy, debug)
 
-    def read(self, file):
-        if os.path.exists(file):
-            with open(file, 'r') as f:
-                raw = f.read()
-        else:
-            raw = self.parse(file)
+    def init_board(self):
+        self.ans = self.model.addVars(self.n, self.n, vtype=GRB.INTEGER, lb=1, ub=self.n, name='ans')
+
+    def parse(self, raw):
         lines = raw.split('\n')
         lines = [line.strip().replace(' ', '').replace('\t', '') for line in lines if line.strip()]
         self.board = {}
@@ -67,67 +33,75 @@ class Skyscrapers():
                     if nums[i*self.n+j].isdigit():
                         self.board['b'][i, j] = int(nums[i*self.n+j])
         return self.board
+        
+    def parse_from_task(self, task):
+        board = ''
+        if ',' in task:
+            task, board = task.split(',')
+        nums = task.split('/')
+        nums = [x if x.isdigit() else '.' for x in nums]
+        if len(nums) % 4:
+            raise ValueError(f'Invalid length of task: {len(nums)}')
+        n = len(nums) // 4
+        res = 'u' + ''.join(nums[:n]) + '\n'
+        res += 'd' + ''.join(nums[n:2*n]) + '\n'
+        res += 'l' + ''.join(nums[2*n:3*n]) + '\n'
+        res += 'r' + ''.join(nums[3*n:]) + '\n'
+        if board:
+            board = board.strip().replace('_', '')
+            for i in range(26):
+                board = board.replace(chr(ord('a') + i), '.'*(i+1))
+            res += board
+        return self.parse(res)
     
-    def add_constraints(self):
+    def parse_from_file(self, file):
+        with open(file, 'r') as f:
+            raw = f.read()
+        return self.parse(raw)
+    
+    def strategy_common(self):
         for i in range(self.n):
             for j in range(self.n):
                 if self.board['b'][i, j]:
-                    self.model.add_constraint(self.ans[i, j] == self.board['b'][i, j])
-        for i in range(self.n):
-            for j in range(self.n):
-                for k in range(j+1, self.n):
-                    self.model.add_constraint(self.ans[i, j] != self.ans[i, k])
-                    self.model.add_constraint(self.ans[j, i] != self.ans[k, i])
-        self.cmp = self.model.binary_var_dict([(i, j, x, y) for i in range(self.n) for j in range(self.n) for x in range(self.n) for y in range(self.n) 
-                                               if (i == x and j != y) or (i != x and j == y)], name='cmp')
+                    self.model.addConstr(self.ans[i, j] == self.board['b'][i, j])
+        self.cmp = self.model.addVars([(i, j, x, y) for i in range(self.n) for j in range(self.n) for x in range(self.n) for y in range(self.n) 
+                                       if (i == x and j != y) or (i != x and j == y)], vtype=GRB.BINARY, name='cmp')
         for i in range(self.n):
             for j in range(self.n):
                 for x in range(self.n):
                     for y in range(self.n):
                         if (i == x and j != y) or (i != x and j == y):
-                            self.model.add_indicator(self.cmp[i, j, x, y], self.ans[i, j] >= self.ans[x, y]+1, active_value=1)
-                            self.model.add_indicator(self.cmp[i, j, x, y], self.ans[i, j] <= self.ans[x, y]-1, active_value=0)
-        self.visible = self.model.binary_var_dict([(i, j, d) for i in range(self.n) for j in range(self.n) for d in ['u', 'd', 'l', 'r']], name='visible')
+                            self.model.addConstr((self.cmp[i, j, x, y] == 1) >> (self.ans[i, j] >= self.ans[x, y]+1))
+                            self.model.addConstr((self.cmp[i, j, x, y] == 0) >> (self.ans[i, j] <= self.ans[x, y]-1))
+        self.visible = self.model.addVars([(i, j, d) for i in range(self.n) for j in range(self.n) for d in ['u', 'd', 'l', 'r']], vtype=GRB.BINARY, name='visible')
         for i in range(self.n):
             for j in range(self.n):
-                self.model.add_indicator(self.visible[i, j, 'u'], self.model.sum(self.cmp[i, j, k, j] for k in range(i)) == i, active_value=1)
-                self.model.add_indicator(self.visible[i, j, 'u'], self.model.sum(self.cmp[i, j, k, j] for k in range(i)) <= i-1, active_value=0)
-                self.model.add_indicator(self.visible[i, j, 'd'], self.model.sum(self.cmp[i, j, k, j] for k in range(i+1, self.n)) == self.n-i-1, active_value=1)
-                self.model.add_indicator(self.visible[i, j, 'd'], self.model.sum(self.cmp[i, j, k, j] for k in range(i+1, self.n)) <= self.n-i-2, active_value=0)
-                self.model.add_indicator(self.visible[i, j, 'l'], self.model.sum(self.cmp[i, j, i, k] for k in range(j)) == j, active_value=1)
-                self.model.add_indicator(self.visible[i, j, 'l'], self.model.sum(self.cmp[i, j, i, k] for k in range(j)) <= j-1, active_value=0)
-                self.model.add_indicator(self.visible[i, j, 'r'], self.model.sum(self.cmp[i, j, i, k] for k in range(j+1, self.n)) == self.n-j-1, active_value=1)
-                self.model.add_indicator(self.visible[i, j, 'r'], self.model.sum(self.cmp[i, j, i, k] for k in range(j+1, self.n)) <= self.n-j-2, active_value=0)
+                self.model.addConstr(self.visible[i, j, 'u'] == gp.and_(self.cmp[i, j, k, j] for k in range(i)))
+                self.model.addConstr(self.visible[i, j, 'd'] == gp.and_(self.cmp[i, j, k, j] for k in range(i+1, self.n)))
+                self.model.addConstr(self.visible[i, j, 'l'] == gp.and_(self.cmp[i, j, i, k] for k in range(j)))
+                self.model.addConstr(self.visible[i, j, 'r'] == gp.and_(self.cmp[i, j, i, k] for k in range(j+1, self.n)))
+    
+    def strategy_default(self):
+        self.strategy_common()
         for i in range(self.n):
             if self.board['u'][i]:
-                self.model.add_constraint(self.model.sum(self.visible[j, i, 'u'] for j in range(self.n)) == self.board['u'][i])
+                self.model.addConstr(gp.quicksum(self.visible[j, i, 'u'] for j in range(self.n)) == self.board['u'][i])
             if self.board['d'][i]:
-                self.model.add_constraint(self.model.sum(self.visible[j, i, 'd'] for j in range(self.n)) == self.board['d'][i])
+                self.model.addConstr(gp.quicksum(self.visible[j, i, 'd'] for j in range(self.n)) == self.board['d'][i])
             if self.board['l'][i]:
-                self.model.add_constraint(self.model.sum(self.visible[i, j, 'l'] for j in range(self.n)) == self.board['l'][i])
+                self.model.addConstr(gp.quicksum(self.visible[i, j, 'l'] for j in range(self.n)) == self.board['l'][i])
             if self.board['r'][i]:
-                self.model.add_constraint(self.model.sum(self.visible[i, j, 'r'] for j in range(self.n)) == self.board['r'][i])
+                self.model.addConstr(gp.quicksum(self.visible[i, j, 'r'] for j in range(self.n)) == self.board['r'][i])
 
-    def solve(self):
-        self.add_constraints()
-        self.model.solve()
-        return self.ans
-    
-    def check_unique(self):
-        clone = self.__class__(self.file, name=self.name + ' Clone', solve=False)
-        clone.flag = clone.model.binary_var_matrix(self.n, self.n, 'flag')
+    def init_clone(self):
+        self.clone.gr = self.clone.model.addVars(self.n, self.n, vtype=GRB.BINARY, name='flag')
+        self.clone.le = self.clone.model.addVars(self.n, self.n, vtype=GRB.BINARY, name='flag')
         for i in range(self.n):
             for j in range(self.n):
-                clone.model.add_indicator(clone.flag[i, j], clone.ans[i, j] != round(self.ans[i, j].solution_value))
-        clone.model.add_constraint(clone.model.sum(clone.flag) >= 1)
-        clone.ans = clone.solve()
-        result = clone.pretty()
-        if 'did not solve successfully' in result:
-            return 'The solution is unique'
-        elif 'Error' in result:
-            return f'Error: {result}'
-        else:
-            return 'The solution is not unique\n' + result
+                self.clone.model.addConstr(self.clone.gr[i, j] + self.clone.le[i, j] <= 1)
+                self.clone.model.addConstr((self.clone.gr[i, j] == 1) >> (self.clone.ans[i, j] >= round(self.ans[i, j].X) + 1))
+                self.clone.model.addConstr((self.clone.le[i, j] == 1) >> (self.clone.ans[i, j] <= round(self.ans[i, j].X) - 1))
+        self.clone.model.addConstr(self.clone.gr.sum() + self.clone.le.sum() >= 1)
     
     def pretty(self):
         try:
@@ -138,7 +112,7 @@ class Skyscrapers():
                 res += str(self.board['l'][i]) if self.board['l'][i] else '*'
                 res += ' '
                 for j in range(self.n):
-                    t = round(self.ans[i, j].solution_value)
+                    t = round(self.ans[i, j].X)
                     res += str(t) + ' '
                 res += str(self.board['r'][i]) if self.board['r'][i] else '*'
                 res += '\n'
@@ -148,6 +122,8 @@ class Skyscrapers():
                 res += '\n' + self.unique
             return res
         except Exception as e:
+            if self.debug:
+                raise e
             return f'Error: {e}'
         
     def __str__(self):
@@ -155,30 +131,26 @@ class Skyscrapers():
             res = ''
             for i in range(self.n):
                 for j in range(self.n):
-                    res += str(round(self.ans[i, j].solution_value)) + ','
+                    res += str(round(self.ans[i, j].X)) + ','
             return res
         except Exception as e:
+            if self.debug:
+                raise e
             return f'Error: {e}'
     
 class Color(Skyscrapers):
     '''
     https://puzzle.university/puzzle/classical-influences-on-modern-architecture.html
     '''
-    def __init__(self, file, name='Color Skyscrapers', check=False, solve=True):
-        super().__init__(file, name, check, solve=False)
+    def __init__(self, file, name='Color Skyscrapers', check=False, solve=True, strategy='default', debug=False):
+        super().__init__(file, name, check, solve, strategy, debug)
+
+    def init_board(self):
+        super().init_board()
         self.colors = ['R', 'O', 'Y', 'G', 'B', 'P', 'V']
-        self.color = self.model.integer_var_dict(self.colors, lb=1, ub=self.n, name='color')
-        if solve:
-            self.ans = self.solve()
-        if solve and check:
-            try:
-                self.unique = self.check_unique()
-            except Exception as e:
-                self.unique = f'Error: {e}'
+        self.color = self.model.addVars(self.colors, vtype=GRB.INTEGER, lb=1, ub=self.n, name='color')
     
-    def read(self, file):
-        with open(file, 'r') as f:
-            raw = f.read()
+    def parse(self, raw):
         lines = raw.split('\n')
         lines = [line.strip().replace(' ', '').replace('\t', '') for line in lines if line.strip()]
         self.board = {}
@@ -187,112 +159,79 @@ class Color(Skyscrapers):
             nums = [x for x in line if x.isupper()]
             self.board[d] = nums
         self.n = len(self.board['u'])
+        self.board['b'] = np.zeros((self.n, self.n), dtype=int)
         return self.board
     
-    def add_constraints(self):
-        for i in range(len(self.colors)):
-            for j in range(i+1, len(self.colors)):
-                self.model.add_constraint(self.color[self.colors[i]] != self.color[self.colors[j]])
+    def parse_from_task(self, task):
+        raise NotImplementedError
+    
+    def strategy_default(self):
+        self.strategy_common()
+        self.b = self.model.addVars(self.colors, range(1, self.n+1), vtype=GRB.BINARY, name='b')
+        for i in self.colors:
+            self.model.addConstr(gp.quicksum(self.b[i, j] for j in range(1, self.n+1)) == 1)
+            for j in range(1, self.n+1):
+                self.model.addConstr((self.b[i, j] == 1) >> (self.color[i] == j))
+        for j in range(1, self.n+1):
+            self.model.addConstr(gp.quicksum(self.b[i, j] for i in self.colors) == 1)
         for i in range(self.n):
-            for j in range(self.n):
-                for k in range(j+1, self.n):
-                    self.model.add_constraint(self.ans[i, j] != self.ans[i, k])
-                    self.model.add_constraint(self.ans[j, i] != self.ans[k, i])
-        self.cmp = self.model.binary_var_dict([(i, j, x, y) for i in range(self.n) for j in range(self.n) for x in range(self.n) for y in range(self.n) 
-                                               if (i == x and j != y) or (i != x and j == y)], name='cmp')
-        for i in range(self.n):
-            for j in range(self.n):
-                for x in range(self.n):
-                    for y in range(self.n):
-                        if (i == x and j != y) or (i != x and j == y):
-                            self.model.add_indicator(self.cmp[i, j, x, y], self.ans[i, j] >= self.ans[x, y]+1, active_value=1)
-                            self.model.add_indicator(self.cmp[i, j, x, y], self.ans[i, j] <= self.ans[x, y]-1, active_value=0)
-        self.visible = self.model.binary_var_dict([(i, j, d) for i in range(self.n) for j in range(self.n) for d in ['u', 'd', 'l', 'r']], name='visible')
-        for i in range(self.n):
-            for j in range(self.n):
-                self.model.add_indicator(self.visible[i, j, 'u'], self.model.sum(self.cmp[i, j, k, j] for k in range(i)) == i, active_value=1)
-                self.model.add_indicator(self.visible[i, j, 'u'], self.model.sum(self.cmp[i, j, k, j] for k in range(i)) <= i-1, active_value=0)
-                self.model.add_indicator(self.visible[i, j, 'd'], self.model.sum(self.cmp[i, j, k, j] for k in range(i+1, self.n)) == self.n-i-1, active_value=1)
-                self.model.add_indicator(self.visible[i, j, 'd'], self.model.sum(self.cmp[i, j, k, j] for k in range(i+1, self.n)) <= self.n-i-2, active_value=0)
-                self.model.add_indicator(self.visible[i, j, 'l'], self.model.sum(self.cmp[i, j, i, k] for k in range(j)) == j, active_value=1)
-                self.model.add_indicator(self.visible[i, j, 'l'], self.model.sum(self.cmp[i, j, i, k] for k in range(j)) <= j-1, active_value=0)
-                self.model.add_indicator(self.visible[i, j, 'r'], self.model.sum(self.cmp[i, j, i, k] for k in range(j+1, self.n)) == self.n-j-1, active_value=1)
-                self.model.add_indicator(self.visible[i, j, 'r'], self.model.sum(self.cmp[i, j, i, k] for k in range(j+1, self.n)) <= self.n-j-2, active_value=0)
-        for i in range(self.n):
-            self.model.add_constraint(self.model.sum(self.visible[j, i, 'u'] for j in range(self.n)) == self.color[self.board['u'][i]])
-            self.model.add_constraint(self.model.sum(self.visible[j, i, 'd'] for j in range(self.n)) == self.color[self.board['d'][i]])
-            self.model.add_constraint(self.model.sum(self.visible[i, j, 'l'] for j in range(self.n)) == self.color[self.board['l'][i]])
-            self.model.add_constraint(self.model.sum(self.visible[i, j, 'r'] for j in range(self.n)) == self.color[self.board['r'][i]])
+            self.model.addConstr(gp.quicksum(self.visible[j, i, 'u'] for j in range(self.n)) == self.color[self.board['u'][i]])
+            self.model.addConstr(gp.quicksum(self.visible[j, i, 'd'] for j in range(self.n)) == self.color[self.board['d'][i]])
+            self.model.addConstr(gp.quicksum(self.visible[i, j, 'l'] for j in range(self.n)) == self.color[self.board['l'][i]])
+            self.model.addConstr(gp.quicksum(self.visible[i, j, 'r'] for j in range(self.n)) == self.color[self.board['r'][i]])
 
     def pretty(self):
         try:
             res = '  '
-            res += ' '.join(str(round(self.color[x].solution_value)) for x in self.board['u'])
+            res += ' '.join(str(round(self.color[x].X)) for x in self.board['u'])
             res += '\n'
             for i in range(self.n):
-                res += str(round(self.color[self.board['l'][i]].solution_value))
+                res += str(round(self.color[self.board['l'][i]].X))
                 res += ' '
                 for j in range(self.n):
-                    t = round(self.ans[i, j].solution_value)
+                    t = round(self.ans[i, j].X)
                     res += str(t) + ' '
-                res += str(round(self.color[self.board['r'][i]].solution_value))
+                res += str(round(self.color[self.board['r'][i]].X))
                 res += '\n'
             res += '  '
-            res += ' '.join(str(round(self.color[x].solution_value)) for x in self.board['d'] )
+            res += ' '.join(str(round(self.color[x].X)) for x in self.board['d'] )
             if self.check:
                 res += '\n' + self.unique
             return res
         except Exception as e:
+            if self.debug:
+                raise e
             return f'Error: {e}'
         
+    def __str__(self):
+        raise NotImplementedError
+    
+class SkyscrapersParser(PuzzleParser):
+    def __init__(self, description='Skyscrapers Solver'):
+        super().__init__(description)
+    
+    def init_config(self):
+        return {'normal': {'class': Skyscrapers, 'file': 'example/skyscrapers.txt'},
+                'color': {'class': Color, 'file': 'example/colorskyscrapers.txt'}}
+    
+    def add_extra_args(self):
+        '''
+        0: 4x4 Easy Skyscrapers
+        1: 4x4 Normal Skyscrapers
+        2: 4x4 Hard Skyscrapers
+        3: 5x5 Easy Skyscrapers
+        4: 5x5 Normal Skyscrapers
+        5: 5x5 Hard Skyscrapers
+        6: 6x6 Easy Skyscrapers
+        7: 6x6 Normal Skyscrapers
+        8: 6x6 Hard Skyscrapers
+        9: Special Daily Skyscrapers
+        10: Special Weekly Skyscrapers
+        11: Special Monthly Skyscrapers
+        '''
+        self.add_argument('--domain', type=str, default='puzzle-skyscrapers', help='Domain of the online puzzle')
+        self.add_argument('--diff', type=int, default=0, help='Difficulty of the online puzzle', choices=range(12))
 
 if __name__ == '__main__':
-
-    config = {
-        'normal': {'class': Skyscrapers, 'file': 'example/skyscrapers.txt'},
-        'color': {'class': Color, 'file': 'example/colorskyscrapers.txt'}
-    }
-
-    parser = ArgumentParser(description='Skyscrapers Solver')
-    parser.add_argument('-f', '--file', type=str, help='File containing the puzzle')
-    parser.add_argument('-o', '--output', type=str, help='File to save the solution')
-    parser.add_argument('--check', action='store_true', help='Check if the solution is unique')
-    parser.add_argument('--type', type=str, default='normal', help='Type of puzzle', choices=config.keys())
-    parser.add_argument('--online', action='store_true', help='Solve puzzle online')
-    parser.add_argument('--diff', type=int, default=0, help='Difficulty of the online puzzle', choices=range(12))
-    parser.add_argument('-n', type=int, default=1, help='Number of puzzles to solve')
-    parser.add_argument('--debug', action='store_true', help='Print debug information')
-
-    args = parser.parse_args()
-    if args.online:
-        os.environ['http_proxy'] = '127.0.0.1:10809'
-        os.environ['https_proxy'] = '127.0.0.1:10809'
-        url = f'https://www.puzzle-skyscrapers.com/?size={args.diff}'
-        for i in range(args.n):
-            task, param = fetch(url)
-            solver = config['normal']['class'](task, check=False)
-            result = str(solver)
-            response, solparam = submit(url, result, param)
-            if not solparam:
-                print(response)
-            else:
-                code = hall(url, solparam)
-                if code == 200:
-                    response += ' (submit to hall successfully)'
-                else:
-                    response += f' (Error: {code})'
-                print(response)
-            if args.debug:
-                print(f'task: {task}')
-                print(f'parsed: {solver.parse(task)}')
-                print(f'result: {result}')
-                print(solver.pretty())
-    else:
-        if not args.file:
-            args.file = config[args.type]['file']
-        solver = config[args.type]['class'](args.file, check=args.check)
-        if args.output:
-            with open(args.output, 'w') as f:
-                f.write(solver.pretty())
-        else:
-            print(solver.pretty())
+    parser = SkyscrapersParser()
+    parser.main()

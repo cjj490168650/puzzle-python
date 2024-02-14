@@ -104,8 +104,6 @@ class PuzzleParser(ArgumentParser):
     def main(self):
         self.args = self.parse_args()
         if self.args.online:
-            os.environ['http_proxy'] = '127.0.0.1:10809'
-            os.environ['https_proxy'] = '127.0.0.1:10809'
             url = self.url()
             for i in range(self.args.n):
                 task, param = fetch(url)

@@ -13,7 +13,7 @@ class Sudoku(Puzzle):
     def init_board(self):
         self.ans = self.model.addVars(self.n, self.n, vtype=GRB.INTEGER, lb=1, ub=self.n, name='ans')
 
-    def parse_nums(self, nums):
+    def parse(self, nums):
         if len(nums) == 36:
             self.n = 6
         elif len(nums) == 81:
@@ -47,14 +47,14 @@ class Sudoku(Puzzle):
                 task = task[1:]
             else:
                 raise ValueError(f"Invalid character '{task[0]}'")
-        return self.parse_nums(nums)
+        return self.parse(nums)
     
     def parse_from_file(self, file):
         with open(file, 'r') as f:
             raw = f.read()
         nums = [x for x in raw if not x.isspace()]
         nums = [int(x) if x.isdigit() else ord(x) - ord('A') + 10 if x.isalpha() else 0 for x in nums]
-        return self.parse_nums(nums)
+        return self.parse(nums)
     
     def xy(self):
         if self.n == 6:
@@ -119,8 +119,8 @@ class Sudoku(Puzzle):
         return {'default': self.strategy_default, 'inequality': self.strategy_inequality}
     
     def init_clone(self):
-        self.clone.gr = self.clone.model.addVars(self.n, self.n, vtype=GRB.BINARY, name='flag')
-        self.clone.le = self.clone.model.addVars(self.n, self.n, vtype=GRB.BINARY, name='flag')
+        self.clone.gr = self.clone.model.addVars(self.n, self.n, vtype=GRB.BINARY, name='gr')
+        self.clone.le = self.clone.model.addVars(self.n, self.n, vtype=GRB.BINARY, name='le')
         for i in range(self.n):
             for j in range(self.n):
                 self.clone.model.addConstr(self.clone.gr[i, j] + self.clone.le[i, j] <= 1)
