@@ -1,3 +1,3 @@
 Requirements:
 
-[DOcplex](https://github.com/IBMDecisionOptimization/docplex-doc)
+[Gurobi](https://www.gurobi.com/)

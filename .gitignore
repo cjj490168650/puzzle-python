@@ -2,3 +2,6 @@ api.txt
 input
 output
 __pycache__
+*.lp
+*.ilp
+*.sol

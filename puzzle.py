@@ -122,7 +122,7 @@ class PuzzleParser(ArgumentParser):
                     print(response)
                 if self.args.debug:
                     print(f'task: {task}')
-                    print(f'parsed: {solver.parse(task)}')
+                    # print(f'parsed: {solver.parse(task)}')
                     print(f'result: {result}')
                     print(solver.pretty())
         else:
