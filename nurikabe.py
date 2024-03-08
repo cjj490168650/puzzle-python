@@ -53,9 +53,11 @@ class Nurikabe(Puzzle):
                 c = self.raw[x * self.n + y]
                 if c:
                     self.board.clue_size(x, y, int(c))
+        self.board.build_size()
         self.board.rule_connected(1)
         self.board.rule_no2x2()
-        self.board.rule_allmarked(0)
+        self.board.rule_nurikabe()
+        # self.board.rule_allmarked(0)
         return self.board
     
     def pretty(self):
